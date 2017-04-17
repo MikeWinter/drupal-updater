@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+
+declare outputFile
+declare executableFile
+declare -a fileList
+
+function main() {
+  parseOptions "$@"
+
+  local -r tarball=$(mktemp --tmpdir)
+  if [[ -n "$executableFile" ]]
+  then
+    fileList+=("$executableFile")
+  fi
+  createTarball "$tarball"
+  createArchive "$tarball"
+  rm "$tarball"
+  chmod u+x "$outputFile"
+}
+
+function parseOptions() {
+  while getopts 'hf:s:' opt
+  do
+    case $opt in
+      h) showUsage
+         exit
+         ;;
+      f) outputFile=$OPTARG
+         if fileExists "$outputFile"
+         then
+           checkIsRegularFile "$outputFile"
+           checkIsWritable "$outputFile"
+         else
+           local -r path=$(dirname "$outputFile")
+           checkIsDirectory "$path"
+           checkIsWritable "$path"
+         fi
+         ;;
+      s) executableFile=$OPTARG
+         checkIsReadable "$executableFile"
+         checkIsExecutable "$executableFile"
+         ;;
+     \?) exit 1
+         ;;
+    esac
+  done
+  shift $((OPTIND - 1))
+  fileList=("$@")
+
+  checkArchiveSpecified
+  checkFileListSpecified
+  checkArchiveIsNotInFileList
+  removeScriptFromFileList
+}
+
+function showUsage() {
+  cat <<EOF
+Usage: $(basename $0) -f ARCHIVE [OPTION...] FILE...
+       $(basename $0) -h
+Create a self-extracting executable archive.
+
+  -h          show this help list
+  -f ARCHIVE  create archive file ARCHIVE
+  -s SCRIPT   execute script file SCRIPT after extraction
+
+Additional FILEs will be added to the archive payload.
+EOF
+}
+
+function fileExists() {
+  [[ -e "$1" ]]
+}
+
+function checkIsRegularFile() {
+  if ! [[ -f "$1" ]]
+  then
+    >&2 echo Error - Not a regular file: $(realpath "$1")
+    exit 1
+  fi
+}
+
+function checkIsDirectory() {
+  if ! [[ -d "$1" ]]
+  then
+    >&2 echo Error - Not a directory: $(realpath "$1")
+    exit 1
+  fi
+}
+
+function checkIsReadable() {
+  if ! [[ -r "$1" ]]
+  then
+    >&2 echo Error - Not readable: $(realpath "$1")
+    exit 1
+  fi
+}
+
+function checkIsWritable() {
+  if ! [[ -w "$1" ]]
+  then
+    >&2 echo Error - Not writable: $(realpath "$1")
+    exit 1
+  fi
+}
+
+function checkIsExecutable() {
+  if ! [[ -x "$1" ]]
+  then
+    >&2 echo Error - Not executable: $(realpath "$1")
+    exit 1
+  fi
+}
+
+function checkArchiveSpecified() {
+  if [[ -z "$outputFile" ]]
+  then
+    >&2 echo Error - No archive name specified. Use -h for usage information.
+    exit 1
+  fi
+}
+
+function checkFileListSpecified() {
+  if ! [[ ${#fileList} -ge 1 ]]
+  then
+    >&2 echo Error - No files specified for archiving. Use -h for usage information.
+    exit 1
+  fi
+}
+
+function checkArchiveIsNotInFileList() {
+  if arrayContains "$outputFile" fileList
+  then
+    echo Error - Cannot use a payload FILE as the ARCHIVE name: $(realpath "$outputFile")
+    exit 1
+  fi
+}
+
+function removeScriptFromFileList() {
+  if [[ -n "$executableFile" ]]
+  then
+    for i in ${!fileList[@]}
+    do
+      if [[ "${fileList[$i]}" == "$executableFile" ]]
+      then
+        unset fileList[$i]
+      fi
+    done
+  fi
+}
+
+function arrayContains() {
+  local -r target=$1
+  local -n array=$2
+  for item in "${array[@]}"
+  do
+    if [[ "$item" == "$target" ]]
+    then
+      return 0
+    fi
+  done
+  return 1
+}
+
+function createTarball() {
+  local -r destination=$1
+
+  tar -czf "$destination" "${fileList[@]}"
+}
+
+function createArchive() {
+  local -r tarball=$1
+
+  cat - "$tarball" > "$outputFile" <<EOF
+#!/usr/bin/env bash
+
+readonly payloadSize=$(wc -c "$tarball" | awk '{print $1}')
+readonly executable="$executableFile"
+
+tail -c \$payloadSize "\$0" | tar -xz
+
+if [[ -n "\$executable" ]]
+then
+  env "./\$executable" "\$@"
+fi
+exit
+EOF
+}
+
+main "$@"
+
