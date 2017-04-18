@@ -7,14 +7,14 @@ declare -a fileList
 function main() {
   parseOptions "$@"
 
-  local -r tarball=$(mktemp --tmpdir)
+  local -r payload=$(mktemp --tmpdir)
   if [[ -n "$executableFile" ]]
   then
     fileList+=("$executableFile")
   fi
-  createTarball "$tarball"
-  createArchive "$tarball"
-  rm "$tarball"
+  createPayload
+  createArchive
+  rm "$payload"
   chmod u+x "$outputFile"
 }
 
@@ -161,19 +161,15 @@ function arrayContains() {
   return 1
 }
 
-function createTarball() {
-  local -r destination=$1
-
-  tar -czf "$destination" "${fileList[@]}"
+function createPayload() {
+  tar -czf "$payload" "${fileList[@]}"
 }
 
 function createArchive() {
-  local -r tarball=$1
-
-  cat - "$tarball" > "$outputFile" <<EOF
+  cat - "$payload" > "$outputFile" <<EOF
 #!/usr/bin/env bash
 
-readonly payloadSize=$(wc -c "$tarball" | awk '{print $1}')
+readonly payloadSize=$(wc -c "$payload" | awk '{print $1}')
 readonly executable="$executableFile"
 
 tail -c \$payloadSize "\$0" | tar -xz
