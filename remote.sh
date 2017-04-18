@@ -40,7 +40,6 @@ function backupFiles() {
 
 function upgradeInstallation() {
   wget https://ftp.drupal.org/files/projects/drupal-7.54.tar.gz
-  
 }
 
 function cleanUp() {
