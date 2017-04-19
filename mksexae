@@ -6,10 +6,7 @@ function main() {
   parseOptions "$@"
 
   local -r payload=$(mktemp -t tmp.)
-  if [[ -n "$executable" ]]
-  then
-    files+=("$executable")
-  fi
+  addExecutableToPayload
   createPayload
   createArchive
   rm "$payload"
@@ -157,6 +154,13 @@ function arrayContains() {
     fi
   done
   return 1
+}
+
+function addExecutableToPayload() {
+  if [[ -n "$executable" ]]
+  then
+    files+=("$executable")
+  fi
 }
 
 function createPayload() {
