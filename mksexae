@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
 
-declare outputFile
-declare executableFile
-declare -a fileList
-
 function main() {
+  local archive executable
+  local -a files
   parseOptions "$@"
 
-  local -r payload=$(mktemp --tmpdir)
-  if [[ -n "$executableFile" ]]
+  local -r payload=$(mktemp -t tmp.)
+  if [[ -n "$executable" ]]
   then
-    fileList+=("$executableFile")
+    files+=("$executable")
   fi
   createPayload
   createArchive
   rm "$payload"
-  chmod u+x "$outputFile"
+  chmod u+x "$archive"
 }
 
 function parseOptions() {
@@ -25,27 +23,27 @@ function parseOptions() {
       h) showUsage
          exit
          ;;
-      f) outputFile=$OPTARG
-         if fileExists "$outputFile"
+      f) archive="$OPTARG"
+         if fileExists "$archive"
          then
-           checkIsRegularFile "$outputFile"
-           checkIsWritable "$outputFile"
+           checkIsRegularFile "$archive"
+           checkIsWritable "$archive"
          else
-           local -r path=$(dirname "$outputFile")
+           local -r path=$(dirname "$archive")
            checkIsDirectory "$path"
            checkIsWritable "$path"
          fi
          ;;
-      s) executableFile=$OPTARG
-         checkIsReadable "$executableFile"
-         checkIsExecutable "$executableFile"
+      s) executable="$OPTARG"
+         checkIsReadable "$executable"
+         checkIsExecutable "$executable"
          ;;
      \?) exit 1
          ;;
     esac
   done
   shift $((OPTIND - 1))
-  fileList=("$@")
+  files=("$@")
 
   checkArchiveSpecified
   checkFileListSpecified
@@ -112,7 +110,7 @@ function checkIsExecutable() {
 }
 
 function checkArchiveSpecified() {
-  if [[ -z "$outputFile" ]]
+  if [[ -z "$archive" ]]
   then
     >&2 echo Error - No archive name specified. Use -h for usage information.
     exit 1
@@ -120,7 +118,7 @@ function checkArchiveSpecified() {
 }
 
 function checkFileListSpecified() {
-  if ! [[ ${#fileList} -ge 1 ]]
+  if ! [[ ${#files} -ge 1 ]]
   then
     >&2 echo Error - No files specified for archiving. Use -h for usage information.
     exit 1
@@ -128,21 +126,21 @@ function checkFileListSpecified() {
 }
 
 function checkArchiveIsNotInFileList() {
-  if arrayContains "$outputFile" fileList
+  if arrayContains "$archive" files
   then
-    echo Error - Cannot use a payload FILE as the ARCHIVE name: $(realpath "$outputFile")
+    echo Error - Cannot use a payload FILE as the ARCHIVE name: $(realpath "$archive")
     exit 1
   fi
 }
 
 function removeScriptFromFileList() {
-  if [[ -n "$executableFile" ]]
+  if [[ -n "$executable" ]]
   then
-    for i in ${!fileList[@]}
+    for i in ${!files[@]}
     do
-      if [[ "${fileList[$i]}" == "$executableFile" ]]
+      if [[ "${files[$i]}" == "$executable" ]]
       then
-        unset fileList[$i]
+        unset files[$i]
       fi
     done
   fi
@@ -162,21 +160,20 @@ function arrayContains() {
 }
 
 function createPayload() {
-  tar -czf "$payload" "${fileList[@]}"
+  tar -czf "$payload" "${files[@]}"
 }
 
 function createArchive() {
-  cat - "$payload" > "$outputFile" <<EOF
+  cat - "$payload" > "$archive" <<EOF
 #!/usr/bin/env bash
 
 readonly payloadSize=$(wc -c "$payload" | awk '{print $1}')
-readonly executable="$executableFile"
 
 tail -c \$payloadSize "\$0" | tar -xz
 
-if [[ -n "\$executable" ]]
+if [[ -n "$executable" ]]
 then
-  env "./\$executable" "\$@"
+  env "./$executable" "\$@"
 fi
 exit
 EOF
