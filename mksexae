@@ -5,7 +5,7 @@ function main() {
   local -a files
   parseOptions "$@"
 
-  local -r payload=$(mktemp -t tmp.)
+  local -r payload=$(mktemp)
   addExecutableToPayload
   createPayload
   createArchive
