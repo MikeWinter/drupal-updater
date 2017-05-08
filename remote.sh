@@ -3,6 +3,9 @@
 set -eu
 
 function main() {
+  local -r installDir="$1"
+  local -r currentDate=$(date +%Y-%m-%d)
+
   verifyDrupalVersion
   enableMaintenanceMode
   backupDatabase
@@ -13,9 +16,9 @@ function main() {
 }
 
 function verifyDrupalVersion() {
-  local -r version=$(grep 'DRUPAL_CORE_COMPATIBILITY' | sed "s/'([0-9]+\.[^']+)'/\1/")
+  local -r version=$(grep 'DRUPAL_CORE_COMPATIBILITY' "$installDir/includes/bootstrap.inc" | sed -E "s/.*'([0-9]+\.[^']+)'.*/\1/")
 
-  if ! [[ "$version" != '7.x' ]]
+  if [[ "$version" != '7.x' ]]
   then
     echo Unsupported Drupal version: $version
     exit 1
@@ -31,11 +34,11 @@ function disableMaintenanceMode() {
 }
 
 function backupDatabase() {
-  mysqldump --default-file=backup.cnf --all-databases | gzip > database-$(date +%Y-%m-%d).gz
+  mysqldump --default-file=backup.cnf --all-databases | gzip > database-$currentDate.gz
 }
 
 function backupFiles() {
-  tar -czf files-$(date +%Y-%m-%d).tar.gz public_html/
+  tar -czf files-$currentDate.tar.gz public_html/
 }
 
 function upgradeInstallation() {
@@ -46,5 +49,5 @@ function cleanUp() {
   return
 }
 
-main
+main "$1"
 
